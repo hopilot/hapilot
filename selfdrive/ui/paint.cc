@@ -158,6 +158,34 @@ static void ui_draw_path(const UIState* s) {
         const float lead_d = lead_one.getDRel() * 2.;
         max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
     }
+    auto    car_state = sm["carState"].getCarState();
+    float   accel = car_state.getAEgo();
+    float   v_ego = car_state.getVEgoCluster();
+    float   v_ego_kph = v_ego * MS_TO_KPH;
+    const auto line_x = plan_position.getX(), line_y = plan_position.getY(), line_z = plan_position.getZ();
+    float idxs[33], line_xs[33], line_ys[33], line_zs[33];
+    for (int i = 0; i < 33; i++) {
+        idxs[i] = (float)i;
+        line_xs[i] = line_x[i];
+        line_ys[i] = line_y[i];
+        line_zs[i] = line_z[i];
+    }
+
+    static bool forward = true;
+
+    if (accel > 0.5) forward = true;
+    if (accel < -0.5) forward = false;
+
+    float start_dist = 10.0;
+    float dt = 0.01;
+    float max_t = sqrt((dist - start_dist) / (v_ego * dt));
+    static float pos_t = 2;   // dist = pos_t[] * pos_t[] * v_ego * 0.01 + 3.0,  pos_t = sqrt((dist-3.0) / (v_ego*0.01))
+    for (int i = 0; i < 5; i++) {
+        dist = (pos_t+i) * (pos_t+i) * v_ego * dt + start_dist;
+        if (dist > max_distance) {
+            pos_t[i] = 0;
+            dist = start_dist;
+        }
 
     // 0~150M까지 display해준다... 
     // 높이시작은 0.8 ~ s->show_z_offset(max_distance)
@@ -333,20 +361,33 @@ void DrawApilot::drawLaneLines(const UIState* s) {
             float   v_ego_kph = v_ego * MS_TO_KPH;
 #ifdef __TEST
             v_ego_kph = 20.0;
+            accel = -1.2;
 #endif
             float   seq = (1.0 * v_ego_kph / 100.0);
             if (seq < 0.3) seq = 0.3;
             if (accel < -1.0) forward = false;
             if (accel > -0.5) forward = true;
+            int max_seq = track_vertices_len / 4 + 3;
+#ifdef __TEST
+            if(max_seq> 16) max_seq = 16;
+#endif
+            static int pathDrawSeq2 = -1;
 
             if (forward) {
                 pathDrawSeq += seq;
-                if (pathDrawSeq > track_vertices_len / 4 + 3) pathDrawSeq = 0;
+                if (pathDrawSeq > max_seq) {
+                    pathDrawSeq = (pathDrawSeq2>=0) ? pathDrawSeq2: 0;
+                }
             }
             else {
                 pathDrawSeq -= seq;
-                if (pathDrawSeq < 0) pathDrawSeq = track_vertices_len / 4. + 3;
+                if (pathDrawSeq < 0) {
+                    pathDrawSeq = (pathDrawSeq2>=0)? pathDrawSeq2: max_seq;
+                }
             }
+            if (max_seq > 15) pathDrawSeq2 = ((int)pathDrawSeq - max_seq/2 + max_seq) % max_seq;
+            else pathDrawSeq2 = -5;
+
             float   x[6], y[6];
 
             switch (show_path_mode) {
@@ -362,7 +403,8 @@ void DrawApilot::drawLaneLines(const UIState* s) {
                     y[3] = scene.track_vertices[track_vertices_len - i - 1].y();
 
                     int draw = false;
-                    if ((int)pathDrawSeq == i/2 || (int)pathDrawSeq == i/2-2) draw = true;
+                    if ((int)pathDrawSeq == i / 2 || (int)pathDrawSeq == i / 2 - 2) draw = true;
+                    if (pathDrawSeq2 == i / 2 || pathDrawSeq2 == i / 2 - 2) draw = true;
                     //if ((int)(pathDrawSeq + 0.5) * 2 == i || (((int)(pathDrawSeq + 0.5) - 2) * 2 == i))  draw = true;
                     if (track_vertices_len / 2 < 8) draw = true;
                     if (show_path_mode == 5 || show_path_mode == 6) draw = true;
@@ -395,6 +437,7 @@ void DrawApilot::drawLaneLines(const UIState* s) {
 
                     int draw = false;
                     if ((int)pathDrawSeq == i / 2 || (int)pathDrawSeq == i / 2 - 2) draw = true;
+                    if (pathDrawSeq2 == i / 2 || pathDrawSeq2 == i / 2 - 2) draw = true;
                     //if ((int)(pathDrawSeq + 0.5) * 2 == i || (((int)(pathDrawSeq + 0.5) - 2) * 2 == i))  draw = true;
                     if (track_vertices_len / 2 < 8) draw = true;
                     if (show_path_mode == 7 || show_path_mode == 8) draw = true;
@@ -413,6 +456,48 @@ void DrawApilot::drawLaneLines(const UIState* s) {
             }
         }
 #endif
+    }
+}
+void ui_draw_radar_info(const UIState* s) {
+
+    char str[128];
+
+    if (s->show_radar_info) {
+        bool disp = false;
+        int wStr = 40;
+        for (auto const& vrd : s->scene.lead_vertices_ongoing) {
+            auto [rx, ry, rd, rv, ry_rel] = vrd;
+            disp = true;
+            sprintf(str, "%.0f", rv * 3.6);
+            wStr = 35 * (strlen(str) + 1);
+            ui_fill_rect(s->vg, { (int)(rx - wStr / 2), (int)(ry - 35), wStr, 42 }, COLOR_GREEN, 15);
+            ui_draw_text(s, rx, ry, str, 40, COLOR_WHITE, BOLD);
+            if (s->show_radar_info == 2) {
+                sprintf(str, "%.1f", ry_rel);
+                ui_draw_text(s, rx, ry + 40, str, 40, COLOR_WHITE, BOLD);
+            }
+        }
+        for (auto const& vrd : s->scene.lead_vertices_oncoming) {
+            auto [rx, ry, rd, rv, ry_rel] = vrd;
+            sprintf(str, "%.0f", rv * 3.6);
+            wStr = 35 * (strlen(str) + 1);
+            ui_fill_rect(s->vg, { (int)rx - wStr / 2, (int)ry - 35, wStr, 42 }, COLOR_RED, 15);
+            ui_draw_text(s, rx, ry, str, 40, COLOR_WHITE, BOLD);
+            if (s->show_radar_info == 2) {
+                sprintf(str, "%.1f", ry_rel);
+                ui_draw_text(s, rx, ry + 40, str, 40, COLOR_WHITE, BOLD);
+            }
+        }
+        if (s->show_radar_info == 2) {
+            for (auto const& vrd : s->scene.lead_vertices_stopped) {
+                auto [rx, ry, rd, rv, ry_rel] = vrd;
+                strcpy(str, "*");
+                wStr = 35;
+                if (true) {
+                    ui_fill_rect(s->vg, { (int)rx - wStr / 2, (int)ry - 35, wStr, 42 }, COLOR_BLACK, 15);
+                }
+            }
+        }
     }
 }
 float filter_x = 0.0;
@@ -442,6 +527,11 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
     auto car_state = sm["carState"].getCarState();
     int longActiveUser = controls_state.getLongActiveUser();
     int longActiveUserReady = controls_state.getLongActiveUserReady();
+
+    nvgFontFace(s->vg, BOLD);
+    nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
+
+    ui_draw_radar_info(s);
 
     if (s->show_mode == 2) {
         NVGpaint track_bg;
@@ -587,10 +677,6 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
     bool blinkerOn = (blinkerTimer <= 16 / 2);
     int trafficState = lp.getTrafficState();
     char    str[128];
-
-    nvgFontFace(s->vg, BOLD);
-    nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
-
 
 #ifdef __TEST
     static int _desire = 0.;
@@ -1112,43 +1198,6 @@ void DrawApilot::drawLeadApilot(const UIState* s) {
             ui_draw_text(s, bx + 90, by + 80, get_tpms_text(rr), 38, get_tpms_color(rr), BOLD);
         }
 
-    }
-    if (s->show_radar_info) {
-        bool disp = false;
-        int wStr = 40;
-        for (auto const& vrd : s->scene.lead_vertices_ongoing) {
-            auto [rx, ry, rd, rv, ry_rel] = vrd;
-            disp = true;
-            sprintf(str, "%.0f", rv * 3.6);
-            wStr = 35 * (strlen(str) + 1);
-            ui_fill_rect(s->vg, { (int)(rx - wStr / 2), (int)(ry - 35), wStr, 42 }, COLOR_GREEN, 15);
-            ui_draw_text(s, rx, ry, str, 40, COLOR_WHITE, BOLD);
-            if (s->show_radar_info == 2) {
-                sprintf(str, "%.1f", ry_rel);
-                ui_draw_text(s, rx, ry + 40, str, 40, COLOR_WHITE, BOLD);
-            }
-        }
-        for (auto const& vrd : s->scene.lead_vertices_oncoming) {
-            auto [rx, ry, rd, rv, ry_rel] = vrd;
-            sprintf(str, "%.0f", rv * 3.6);
-            wStr = 35 * (strlen(str) + 1);
-            ui_fill_rect(s->vg, { (int)rx - wStr / 2, (int)ry - 35, wStr, 42 }, COLOR_RED, 15);
-            ui_draw_text(s, rx, ry, str, 40, COLOR_WHITE, BOLD);
-            if (s->show_radar_info == 2) {
-                sprintf(str, "%.1f", ry_rel);
-                ui_draw_text(s, rx, ry + 40, str, 40, COLOR_WHITE, BOLD);
-            }
-        }
-        if (s->show_radar_info == 2) {
-            for (auto const& vrd : s->scene.lead_vertices_stopped) {
-                auto [rx, ry, rd, rv, ry_rel] = vrd;
-                strcpy(str, "*");
-                wStr = 35;
-                if (true) {
-                    ui_fill_rect(s->vg, { (int)rx - wStr / 2, (int)ry - 35, wStr, 42 }, COLOR_BLACK, 15);
-                }
-            }
-        }
     }
     // 시간표시
     if (s->show_datetime) {
