@@ -701,11 +701,12 @@ CommunityPanel::CommunityPanel(QWidget* parent) : QWidget(parent) {
   toggleLayout->addWidget(new CValueControl("ShowDmInfo", "화면:DM정보", "0:안함,1:사용함,-1:MODEL사용안함", "../assets/offroad/icon_shell.png", -1, 1, 1));
   toggleLayout->addWidget(new CValueControl("ShowRadarInfo", "화면:레이더감지정보", "0:안함,1:표시함", "../assets/offroad/icon_shell.png", 0, 2, 1));
   toggleLayout->addWidget(new CValueControl("ShowZOffset", "화면:패스높이조정(170)", "올리면 아래로 표시됨", "../assets/offroad/icon_shell.png", -300, 300, 10));
-  toggleLayout->addWidget(new CValueControl("ShowPathMode", "화면:패스표시모드", "", "../assets/offroad/icon_shell.png", 0, 8, 1));
+  toggleLayout->addWidget(new CValueControl("ShowPathMode", "화면:패스표시모드", "", "../assets/offroad/icon_shell.png", 0, 11, 1));
   toggleLayout->addWidget(new CValueControl("ShowPathColor", "화면:패스표시색상", "", "../assets/offroad/icon_shell.png", 0, 19, 1));
-  toggleLayout->addWidget(new CValueControl("ShowPathModeLane", "화면:패스표시모드,레인모드", "", "../assets/offroad/icon_shell.png", 0, 8, 1));
+  toggleLayout->addWidget(new CValueControl("ShowPathModeLane", "화면:패스표시모드,레인모드", "", "../assets/offroad/icon_shell.png", 0, 11, 1));
   toggleLayout->addWidget(new CValueControl("ShowPathColorLane", "화면:패스표시색상,레인모드", "", "../assets/offroad/icon_shell.png", 0, 19, 1));
   toggleLayout->addWidget(new CValueControl("ShowPathWidth", "화면:패스표시폭", "", "../assets/offroad/icon_shell.png", 10, 200, 10));
+  toggleLayout->addWidget(new CValueControl("ShowPlotMode", "화면:디버그플롯", "", "../assets/offroad/icon_shell.png", 0, 5, 1));
 
 }
 
@@ -744,6 +745,7 @@ TuningPanel::TuningPanel(QWidget* parent) : QWidget(parent) {
     toggleLayout->addWidget(new CValueControl("SteerActuatorDelayLow", "횡컨:SteerActuatorDelayLow(30)", "0km/h", "../assets/offroad/icon_road.png", 0, 200, 1));
     toggleLayout->addWidget(new CValueControl("SteerDeltaUp", "횡컨: SteerDeltaUp(3)", "", "../assets/offroad/icon_road.png", 1, 20, 1));
     toggleLayout->addWidget(new CValueControl("SteerDeltaDown", "횡컨: SteerDeltaDown(7)", "", "../assets/offroad/icon_road.png", 1, 20, 1));
+    toggleLayout->addWidget(new CValueControl("SteerRatioApply", "횡컨: SteerRatio적용(0x0.1)", "0:사용안함", "../assets/offroad/icon_road.png", 0, 300, 2));
     toggleLayout->addWidget(horizontal_line());
     toggleLayout->addWidget(new CValueControl("JerkUpperLowerLimit", "롱컨: JERK값(8)", "값이 커지면 가감속반응이 빨라지지만, 기분이 안좋음.", "../assets/offroad/icon_road.png", 5, 50, 1));
     toggleLayout->addWidget(new CValueControl("LongitudinalTuningKpV", "롱컨: P게인(100)", "(시험용) ", "../assets/offroad/icon_road.png", 50, 150, 1));
