@@ -261,7 +261,13 @@ void update_line_data_dist3(const UIState* s, const cereal::XYZTData::Reader& li
     auto lp = sm["lateralPlan"].getLateralPlan();
     //int show_path_color = (lp.getUseLaneLines()) ? s->show_path_color_lane : s->show_path_color;
     int show_path_mode = (lp.getUseLaneLines()) ? s->show_path_mode_lane : s->show_path_mode;
+    auto controls_state = sm["controlsState"].getControlsState();
+    int longActiveUser = controls_state.getLongActiveUser();
+    if (longActiveUser <= 0) {
+        show_path_mode = s->show_path_mode_cruise_off;
+    }
     auto    car_state = sm["carState"].getCarState();
+
     //float   accel = car_state.getAEgo();
     float   v_ego = car_state.getVEgoCluster();
     float   v_ego_kph = v_ego * MS_TO_KPH;
@@ -317,8 +323,8 @@ void update_line_data_dist3(const UIState* s, const cereal::XYZTData::Reader& li
     }
     else if (show_path_mode == 12) {
         draw_t[draw_t_n++] = pos_t;
-        int n = (int)(v_ego_kph * 0.58 + 0.5);
-        if (n < 2) n = 2;
+        int n = (int)(v_ego_kph * 0.058 - 0.5);
+        if (n < 0) n = 0;
         else if (n > 7) n = 7;
         
         for (int i = 0; i < n; i++) {
@@ -337,11 +343,14 @@ void update_line_data_dist3(const UIState* s, const cereal::XYZTData::Reader& li
         }
     }
     bool exit = false;
-    for (int i = 0; i < draw_t_n && !exit; i++) {
-        t = draw_t[draw_t_idx];
-        draw_t_idx = (draw_t_idx + 1) % draw_t_n;
-        if (t < 3.0) continue;
-        if (dist_function(t, max_dist) == max_dist) exit = true;
+    for (int i = 0; i <= draw_t_n && !exit; i++) {
+        if(i==draw_t_n) exit = true;
+        else {
+            t = draw_t[draw_t_idx];
+            draw_t_idx = (draw_t_idx + 1) % draw_t_n;
+            if (t < 3.0) continue;
+            if (dist_function(t, max_dist) == max_dist) exit = true;
+        }
         for (int j = 2; j >= 0; j--) {
             if (exit) dist = dist_function(100, max_dist);
             else dist = dist_function(t - j * 1.0, max_dist);
@@ -435,6 +444,10 @@ void update_model(UIState *s,
   auto lp = sm["lateralPlan"].getLateralPlan();
   //int show_path_color = (lp.getUseLaneLines()) ? s->show_path_color_lane : s->show_path_color;
   int show_path_mode = (lp.getUseLaneLines()) ? s->show_path_mode_lane : s->show_path_mode;
+  auto controls_state = sm["controlsState"].getControlsState();
+  int longActiveUser = controls_state.getLongActiveUser();
+  if (longActiveUser <= 0) show_path_mode = s->show_path_mode_cruise_off;
+
   if(show_path_mode >= 9) 
     update_line_data_dist3(s, plan_position, s->show_path_width, 0.8, s->show_z_offset, &scene.track_vertices, max_distance, false);
   else
