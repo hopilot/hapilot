@@ -8,7 +8,7 @@
       "descr": "(-)좌측,(+)우측",
       "egroup": "LAT",
       "etitle": "PathOffset (0)",
-      "edescr":  "(-)Left,(+)Right",
+      "edescr": "(-)Left,(+)Right",
       "min": -200,
       "max": 200,
       "default": 0,
@@ -355,11 +355,21 @@
     {
       "group": "감속제어",
       "name": "ApplyModelDistOrder",
-      "title": "신호정지 감속모델선택 (32)",
+      "title": "신호정지 감속모델선택 (30)",
       "descr": "숫자가 작을수록 감속을 미리합니다.",
       "min": 1,
       "max": 32,
-      "default": 32,
+      "default": 30,
+      "unit": 1
+    },
+    {
+      "group": "감속제어",
+      "name": "TrafficStopUpdateDist",
+      "title": "신호정지선 갱신 거리 (10M)",
+      "descr": "숫자가 작을수록 정확히(모델의 위치) 감속합니다. 하지만 정지충격이 발생할수 있습니다.",
+      "min": 1,
+      "max": 30,
+      "default": 10,
       "unit": 1
     },
     {
@@ -857,6 +867,16 @@
       "name": "ExperimentalLongitudinalEnabled",
       "title": "롱컨사용(0)",
       "descr": "SCC배선개조, 레이터트랙사용시 이용가능",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "MixRadarInfo",
+      "title": "SCC레이더 비젼 MIX",
+      "descr": "SCC레이더의 부족한 성능을 비젼거리측정데이터와 MIX하여 주행",
       "min": 0,
       "max": 1,
       "default": 0,
