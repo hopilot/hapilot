@@ -143,10 +143,14 @@ def manager_init() -> None:
     ("SoftHoldMode", "1"),       
     ("ApplyModelDistOrder", "30"),       
     ("TrafficStopUpdateDist", "10"),       
+    ("TrafficDetectBrightness", "100"),       
     ("SteeringRateCost", "700"),       
     ("LateralMotionCost", "11"),       
     ("LateralAccelCost", "0"),       
     ("LateralJerkCost", "5"),       
+    ("LateralTorqueKp", "100"),       
+    ("LateralTorqueKi", "10"),       
+    ("LateralTorqueKd", "0"),       
     ("SteerActuatorDelay", "30"),       
     ("CruiseControlMode", "4"),
     ("CruiseOnDist", "0"),
@@ -304,6 +308,8 @@ def main() -> None:
   prepare_only = os.getenv("PREPAREONLY") is not None
 
   manager_init()
+  os.system("python /data/openpilot/selfdrive/car/hyundai/values.py > /data/params/d/SupportedCars")
+  os.system("python /data/openpilot/selfdrive/car/gm/values.py > /data/params/d/SupportedCars_gm")
 
   # Start UI early so prepare can happen in the background
   if not prepare_only:

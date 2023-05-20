@@ -9,7 +9,6 @@ from selfdrive.car.hyundai.values import Buttons
 from common.params import Params
 from selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX, V_CRUISE_MIN, CONTROL_N_LAT
 from selfdrive.controls.lib.lateral_planner import TRAJECTORY_SIZE
-#from selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import AUTO_TR_CRUISE_GAP
 from selfdrive.car.hyundai.values import CAR
 from selfdrive.car.isotp_parallel_query import IsoTpParallelQuery
 from common.filter_simple import StreamingMovingAverage
@@ -72,6 +71,7 @@ class CruiseHelper:
     self.trafficState = 0
     self.xState_prev = XState.cruise
     self.xState = XState.cruise
+    self.mpcEvent_prev = 0
     self.xStop = 0
     self.v_ego_kph = 0
     self.v_ego_kph_set = 0
@@ -83,6 +83,7 @@ class CruiseHelper:
     self.naviSpeed = 255
     self.roadSpeed = 255
     self.curveSpeed = 255
+    self.turnSpeed_prev = 300
     self.cruiseSpeedTarget = 0
 
     self.active_cam = False
@@ -97,7 +98,7 @@ class CruiseHelper:
     self.leadCarSpeed = 0.
 
     self.update_params_count = 0
-    self.curvatureFilter = StreamingMovingAverage(10)
+    self.curvatureFilter = StreamingMovingAverage(20)
 
     self.longCruiseGap = int(Params().get("PrevCruiseGap"))
     self.cruiseSpeedMin = int(Params().get("CruiseSpeedMin"))
@@ -319,6 +320,24 @@ class CruiseHelper:
     return clip(apply_limit_speed, 0, MAX_SET_SPEED_KPH), clip(self.roadLimitSpeed, 30, MAX_SET_SPEED_KPH)
 
   def apilot_curve(self, CS, controls):
+    # 회전속도를 선속도 나누면 : 곡률이 됨. [20]은 약 4초앞의 곡률을 보고 커브를 계산함.
+    #curvature = abs(controls.sm['modelV2'].orientationRate.z[20] / clip(CS.vEgo, 0.1, 100.0))
+    orientationRates = np.array(controls.sm['modelV2'].orientationRate.z, dtype=np.float32)
+    speed = min(self.turnSpeed_prev / 3.6, clip(CS.vEgo, 0.5, 100.0))
+    curvature = np.max(np.abs(orientationRates[12:])) / speed
+    curvature = self.curvatureFilter.process(curvature) * self.autoCurveSpeedFactor
+    turnSpeed = 300
+    if abs(curvature) > 0.0001:
+      turnSpeed = interp(curvature, V_CURVE_LOOKUP_BP, V_CRUVE_LOOKUP_VALS)
+      turnSpeed = clip(turnSpeed, MIN_CURVE_SPEED, 255)
+    else:
+      turnSpeed = 300
+
+    controls.debugText1 = 'CURVE={:5.1f},curvature={:5.4f}'.format(turnSpeed, curvature)
+    self.turnSpeed_prev = turnSpeed
+    return turnSpeed
+
+  def apilot_curve_old(self, CS, controls):
     curvatures = controls.sm['lateralPlan'].curvatures
     turnSpeed = 300
     if len(curvatures) == CONTROL_N_LAT:
@@ -572,20 +591,21 @@ class CruiseHelper:
 
   def cruise_control_speed(self, controls, CS, v_cruise_kph):
 
+    #self.cruiseControlMode : 가상의 초과속도를 말함.
     v_cruise_kph_apply = v_cruise_kph    
     if self.cruiseControlMode > 0:
       if self.longActiveUser > 0:
 
-        if self.cruiseSpeedTarget > 0:  # 작동중일때 설정 속도변화 감지.
+        if self.cruiseSpeedTarget > 0:  # 작동중일때 크루즈 설정속도 변화감지.
           if self.cruiseSpeedTarget < v_cruise_kph:  # 설정속도가 빨라지면..
             self.cruiseSpeedTarget = v_cruise_kph
           elif self.cruiseSpeedTarget > v_cruise_kph: # 설정속도가 느려지면.
             self.cruiseSpeedTarget = 0
-        elif self.cruiseSpeedTarget == 0 and self.v_ego_kph + 3 < v_cruise_kph and v_cruise_kph > 20.0:
+        elif self.cruiseSpeedTarget == 0 and self.v_ego_kph + 3 < v_cruise_kph and v_cruise_kph > 20.0:  # 주행중 속도가 떨어지면 다시 크루즈연비제어 시작.
           self.cruiseSpeedTarget = v_cruise_kph
 
-        if self.cruiseSpeedTarget != 0:
-          if self.v_ego_kph >= self.cruiseSpeedTarget + 1: # 설정속도를 초과하면..
+        if self.cruiseSpeedTarget != 0:  ## 크루즈 연비 제어모드 작동중일때: 연비제어 종료지점
+          if CS.vEgo*3.6 > self.cruiseSpeedTarget: # 설정속도를 초과하면..
             self.cruiseSpeedTarget = 0
           else:
             v_cruise_kph_apply = self.cruiseSpeedTarget + self.cruiseControlMode  # + 설정 속도로 설정함.
@@ -623,20 +643,25 @@ class CruiseHelper:
     
     trafficState = (controls.sm['longitudinalPlan'].trafficState % 100)
     trafficError = controls.sm['longitudinalPlan'].trafficState >= 1000
+    mpcEvent = controls.sm['longitudinalPlan'].mpcEvent
     if self.longActiveUser>0:
-      if self.xState != self.xState_prev and self.xState == XState.softHold:
-        controls.events.add(EventName.autoHold)
-      if self.xState == XState.softHold and self.trafficState != 2 and trafficState == 2:
-        self.send_apilot_event(controls, EventName.trafficSignChanged)
-        #self.radarAlarmCount = 2000 if self.radarAlarmCount == 0 else self.radarAlarmCount
-      elif self.xState == XState.e2eCruise and self.trafficState != 2 and trafficState == 2 and CS.vEgo < 0.1:
-        controls.events.add(EventName.trafficSignGreen)
-      elif self.xState == XState.e2eStop and self.xState_prev in [XState.e2eCruise, XState.lead]: # and self.longControlActiveSound >= 2:
-        self.send_apilot_event(controls, EventName.trafficStopping, 20.0)
-      elif trafficError:
-        self.send_apilot_event(controls, EventName.trafficError, 20.0)
+      if mpcEvent != self.mpcEvent_prev and mpcEvent>0:
+        #controls.events.add(mpcEvent)
+        self.send_apilot_event(controls, mpcEvent, 5.0)
+      #if self.xState != self.xState_prev and self.xState == XState.softHold:
+      #  controls.events.add(EventName.autoHold)
+      #if self.xState == XState.softHold and self.trafficState != 2 and trafficState == 2:
+      #  self.send_apilot_event(controls, EventName.trafficSignChanged)
+      #  #self.radarAlarmCount = 2000 if self.radarAlarmCount == 0 else self.radarAlarmCount
+      #elif self.xState == XState.e2eCruise and self.trafficState != 2 and trafficState == 2 and CS.vEgo < 0.1:
+      #  controls.events.add(EventName.trafficSignGreen)
+      #elif self.xState == XState.e2eStop and self.xState_prev in [XState.e2eCruise, XState.lead]: # and self.longControlActiveSound >= 2:
+      #  self.send_apilot_event(controls, EventName.trafficStopping, 20.0)
+      #elif trafficError:
+      #  self.send_apilot_event(controls, EventName.trafficError, 20.0)
 
 
+    self.mpcEvent_prev = mpcEvent
     self.trafficState = trafficState
     self.dRel = dRel
     self.vRel = vRel
