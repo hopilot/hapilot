@@ -644,7 +644,10 @@ class LongitudinalMpc:
     if v_ego_kph < 1.0: 
       stopSign = model_x < 20.0 and model_v < 10.0
     elif v_ego_kph < 80.0:
-      stopSign = model_x < 110.0 and ((model_v < 3.0) or (model_v < v[0]*0.6)) and abs(y[-1]) < 5.0
+      if self.trafficDetectBrightness < self.lightSensor:
+        stopSign = model_x < 110.0 and ((model_v < 3.0) or (model_v < v[0]*0.6)) and abs(y[-1]) < 5.0
+      else:
+        stopSign = model_x < 130.0 and ((model_v < 3.0) or (model_v < v[0]*0.7)) and abs(y[-1]) < 5.0
     else:
       stopSign = False
 
@@ -810,7 +813,7 @@ class LongitudinalMpc:
         self.mpcEvent = EventName.trafficStopping
       else:
         self.xState = XState.e2eCruise
-        if carstate.brakePressed and v_ego_kph < 1.0:
+        if carstate.brakePressed and v_ego_kph < 1.0  and self.softHoldMode > 0:
           self.xState = XState.softHold
       if self.trafficState == 2: #stop_x > 100.0:
         stop_x = 1000.0
@@ -825,7 +828,7 @@ class LongitudinalMpc:
     elif stop_x == 1000.0:
       self.stopDist = 0.0
     elif self.stopDist > 0:
-      stop_dist = v_ego * v_ego / (2.8 * 2) # 2.8m/s^2 으로 감속할경우 필요한 거리.
+      stop_dist = v_ego ** 2 / (2.8 * 2) # 2.8m/s^2 으로 감속할경우 필요한 거리.
       self.stopDist = self.stopDist if self.stopDist > stop_dist else stop_dist
       stop_x = 0.0
 #    else:
