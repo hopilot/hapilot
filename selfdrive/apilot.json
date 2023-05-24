@@ -317,7 +317,7 @@
       "name": "LongitudinalActuatorDelayLowerBound",
       "title": "_LADLowerBound(30)",
       "descr": "낮추면 정지력증가, 가속력감소",
-      "min": 0,
+      "min": 10,
       "max": 100,
       "default": 50,
       "unit": 10
@@ -327,7 +327,7 @@
       "name": "LongitudinalActuatorDelayUpperBound",
       "title": "_LADUpperBound(60)",
       "descr": "올리면 감속력 증가",
-      "min": 0,
+      "min": 10,
       "max": 100,
       "default": 50,
       "unit": 10
@@ -420,6 +420,16 @@
       "min": 50,
       "max": 300,
       "default": 1,
+      "unit": 1
+    },
+    {
+      "group": "감속제어",
+      "name": "AutoCurveSpeedFactorIn",
+      "title": "커브속도조절비율진입(0%)",
+      "descr": "올리면 진입속도를 더 줄이도록 노력합니다.",
+      "min": 0,
+      "max": 300,
+      "default": 0,
       "unit": 1
     },
     {
