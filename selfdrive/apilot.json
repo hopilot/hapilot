@@ -154,6 +154,16 @@
     },
     {
       "group": "조향튜닝",
+      "name": "LateralTorqueKf",
+      "title": "_LateralTorqueKf(100)",
+      "descr": "",
+      "min": 0,
+      "max": 200,
+      "default": 1,
+      "unit": 1
+    },
+    {
+      "group": "조향튜닝",
       "name": "SteerActuatorDelay",
       "title": "SteerActuatorDelay(30)",
       "descr": "값이크면 조향을 좀더 미리함(일반,10msec)",
@@ -380,6 +390,16 @@
       "min": 10,
       "max": 120,
       "default": 5,
+      "unit": 1
+    },
+    {
+      "group": "감속제어",
+      "name": "TrafficStopMode",
+      "title": "신호정지 방법 (1)",
+      "descr": "0:사용안함,1:Apilot모드,2:Mix 실험적모드",
+      "min": 0,
+      "max": 2,
+      "default": 1,
       "unit": 1
     },
     {

@@ -268,7 +268,8 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "ApplyLongDynamicCost", PERSISTENT },
     { "AutoSpeedAdjustWithLeadCar", PERSISTENT },
     { "TrafficStopAccel", PERSISTENT },
-    { "TrafficStopModelSpeed", PERSISTENT },        
+    { "TrafficStopModelSpeed", PERSISTENT },
+    { "TrafficStopMode", PERSISTENT },
     { "CruiseButtonMode", PERSISTENT },
     { "GapButtonMode", PERSISTENT },
     { "PrevCruiseGap", PERSISTENT },
@@ -325,6 +326,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     { "LateralTorqueKp", PERSISTENT },
     { "LateralTorqueKi", PERSISTENT },
     { "LateralTorqueKd", PERSISTENT },
+    { "LateralTorqueKf", PERSISTENT },
     { "SteerDeltaUp", PERSISTENT },
     { "SteerDeltaDown", PERSISTENT },
 };
