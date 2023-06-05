@@ -110,7 +110,7 @@ void OnroadWindow::updateState(const UIState &s) {
 }
 
 void OnroadWindow::mousePressEvent(QMouseEvent* e) {
-  if (map != nullptr) {
+  if (false && map != nullptr) {
     bool sidebarVisible = geometry().x() > 0;
     map->setVisible(!sidebarVisible && !map->isVisible());
   }
