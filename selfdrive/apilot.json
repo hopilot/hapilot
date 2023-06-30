@@ -475,8 +475,8 @@
     {
       "group": "조향일반",
       "name": "AutoTurnControl",
-      "title": "자동모델턴제어(0)",
-      "descr": "시험용",
+      "title": "�ڵ��ϱ��(0)",
+      "descr": "0:������,1:����NOO, 2:���� NOO",
       "min": 0,
       "max": 2,
       "default": 0,
