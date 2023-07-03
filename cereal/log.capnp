@@ -1031,6 +1031,7 @@ struct LateralPlan @0xe1e9318e2ae8b51e {
 
   #apilot
   desireEvent @34 : Int32;
+  desireReady @35 : Int32;
 
   mpcSolutionValid @9 :Bool;
   desire @17 :Desire;
@@ -1995,7 +1996,7 @@ struct RoadLimitSpeed {
     sectionAdjustSpeed @10 :Bool;
     camSpeedFactor @11 :Float32;
 
-    xTurnInfo @12 : Int16;
+    xTurnInfo @12 : Int32;
     xDistToTurn @13 : Int32;
     xSpdDist @14 : Int16;
     xSpdLimit @15 : Int16;

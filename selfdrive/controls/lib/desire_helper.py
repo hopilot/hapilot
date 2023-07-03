@@ -1,3 +1,4 @@
+import numpy as np
 from cereal import log, car
 from common.conversions import Conversions as CV
 from common.realtime import DT_MDL
@@ -75,9 +76,13 @@ class DesireHelper:
     self.desireEvent_prev = 0
     self.waitTorqueApply = False
     self.desireEvent_nav = 0
+    self.navActive = 0
+    self.left_road_edge = 0.0
+    self.right_road_edge = 0.0
+    self.desireReady = 0
 
 
-  def update(self, carstate, lateral_active, lane_change_prob, md, turn_prob, roadLimitSpeed):
+  def update(self, carstate, lateral_active, lane_change_prob, md, turn_prob, roadLimitSpeed, lane_width):
     self.paramsCount += 1
     if self.paramsCount > 100:
       self.autoTurnControl = int(Params().get("AutoTurnControl", encoding="utf8"))
@@ -88,11 +93,34 @@ class DesireHelper:
 
     v_ego = carstate.vEgo
     v_ego_kph = v_ego * CV.MS_TO_KPH
-    one_blinker = carstate.leftBlinker != carstate.rightBlinker
+    #one_blinker = carstate.leftBlinker != carstate.rightBlinker
     below_lane_change_speed = v_ego < LANE_CHANGE_SPEED_MIN
 
+    #lane_width_available = lane_width * 0.8
+    #alpha = 0.1
+    #self.left_road_edge = self.left_road_edge * (1-alpha) + (-md.roadEdges[0].y[0] * alpha)
+    #self.right_road_edge = self.right_road_edge * (1-alpha) + (md.roadEdges[1].y[0] * alpha)
+
+    # 왼쪽엣지 - 왼쪽차선
+    #self.left_road_edge = self.left_road_edge * (1-alpha) + (-md.roadEdges[0].y[0] + md.laneLines[1].y[0]) * alpha
+    #self.right_road_edge = self.right_road_edge * (1-alpha) + (md.roadEdges[1].y[0] - md.laneLines[2].y[0]) * alpha
+
+    left_edge_prob = np.clip(1.0 - md.roadEdgeStds[0], 0.0, 1.0)
+    left_nearside_prob = md.laneLineProbs[0]
+    left_close_prob = md.laneLineProbs[1]
+    right_close_prob = md.laneLineProbs[2]
+    right_nearside_prob = md.laneLineProbs[3]
+    right_edge_prob = np.clip(1.0 - md.roadEdgeStds[1], 0.0, 1.0)
+
+    if right_edge_prob > 0.35 and right_nearside_prob < 0.2 and left_nearside_prob >= right_nearside_prob:
+      road_edge_stat = 1
+    elif left_edge_prob > 0.35 and left_nearside_prob < 0.2 and right_nearside_prob >= left_nearside_prob:
+      road_edge_stat = -1
+    else:
+      road_edge_stat = 0
+
     #navInstruction
-    nav_direction = LaneChangeDirection.none
+    direction = nav_direction = LaneChangeDirection.none
     nav_turn = False
     if False: #self.autoTurnControl == 1:
       nav_distance = navInstruction.maneuverDistance;
@@ -101,36 +129,56 @@ class DesireHelper:
       if nav_type in ['turn', 'fork', 'off ramp']:
         nav_turn = True if nav_type == 'turn' and nav_modifier in ['left', 'right'] else False
         nav_direction = LaneChangeDirection.left if nav_modifier in ['slight left', 'left'] else LaneChangeDirection.right if nav_modifier in ['slight right', 'right'] else LaneChangeDirection.none
-      if nav_distance < 20 or nav_distance > 100.0 or self.autoTurnControl == 0:
+      if nav_distance < 20 or nav_distance > 100.0:
         nav_direction = LaneChangeDirection.none
         self.desireEvent_nav = 0
     elif self.autoTurnControl > 0:
       nav_distance = roadLimitSpeed.xDistToTurn
       nav_type = roadLimitSpeed.xTurnInfo
       nav_turn = True if nav_type in [1,2] else False
-      nav_direction = LaneChangeDirection.left if nav_type in [1,3] else LaneChangeDirection.right if nav_type in [2,4] else LaneChangeDirection.none
-      if nav_distance < 10 or nav_distance > 60.0 or self.autoTurnControl == 0:
-        nav_direction = LaneChangeDirection.none
+      direction = LaneChangeDirection.left if nav_type in [1,3] else LaneChangeDirection.right if nav_type in [2,4,43] else LaneChangeDirection.none
+      nav_direction = LaneChangeDirection.none
+      #턴인데 거리가 200M이하인경우 로드에지가 아니면 차선변경시도... 우회전만..
+      if 5 < nav_distance < 200:
+        self.desireReady = 1
+        if nav_turn:
+          if nav_distance < 180 and (direction == LaneChangeDirection.right) and (road_edge_stat < 1) and not carstate.rightBlindspot and self.navActive==0: # 멀리있는경우 차로변경
+            nav_turn = False
+            nav_direction = direction
+          elif nav_distance < 50 and self.navActive != 2: # 턴시작
+            nav_direction = direction
+        elif nav_distance < 180 and self.navActive == 0: # 차로변경시작
+          if (direction == LaneChangeDirection.right) and (road_edge_stat < 1) and not carstate.rightBlindspot:
+            nav_direction = direction
+          elif (direction == LaneChangeDirection.left) and (road_edge_stat > -1) and not carstate.leftBlindspot:
+            nav_direction = direction
+      else:
+        self.desireReady = 0
+        self.navActive = 0
+        direction = LaneChangeDirection.none
+
+      if nav_direction == LaneChangeDirection.none:
         self.desireEvent_nav = 0
+
 
     #print ('{} {} {} {} {}'.format(nav_direction, nav_turn, nav_distance, nav_type, nav_modifier))
     leftBlinker = carstate.leftBlinker
     rightBlinker = carstate.rightBlinker
-    if nav_direction == LaneChangeDirection.right:
+    if direction == LaneChangeDirection.right:
       if leftBlinker:
-        nav_direction = LaneChangeDirection.none
+        direction = nav_direction = LaneChangeDirection.none
       else:
         rightBlinker = True
-    elif nav_direction == LaneChangeDirection.left:
+    elif direction == LaneChangeDirection.left:
       if rightBlinker:
-        nav_direction = LaneChangeDirection.none
+        direction = nav_direction = LaneChangeDirection.none
       else:
         leftBlinker = True
 
+    one_blinker = leftBlinker != rightBlinker
+
     #로드엣지 읽기..
-    left_road_edge = -md.roadEdges[0].y[0]
-    right_road_edge = md.roadEdges[1].y[0]
-    road_edge_detected = (((left_road_edge < 3.5) and leftBlinker) or ((right_road_edge < 3.5) and rightBlinker))
+    road_edge_detected = (((road_edge_stat < 0) and leftBlinker) or ((road_edge_stat > 0) and rightBlinker))
 
     #레인체인지 또는 자동턴 타임아웃
     laneChangeTimeMax = LANE_CHANGE_TIME_MAX if not self.turnControlState else self.autoTurnTimeMax
@@ -147,6 +195,9 @@ class DesireHelper:
                         ((carstate.steeringTorque > 0 and leftBlinker) or
                         (carstate.steeringTorque < 0 and rightBlinker))
 
+    steering_pressed_r = carstate.steeringPressed and \
+                        ((carstate.steeringTorque < 0 and leftBlinker) or
+                        (carstate.steeringTorque > 0 and rightBlinker))
 
     checkAutoTurnEnabled = self.autoTurnControl > 0
     checkAutoTurnSpeed = (v_ego_kph < self.autoTurnSpeed) and checkAutoTurnEnabled
@@ -173,14 +224,19 @@ class DesireHelper:
         #오토턴이켜지고 핸들힘이 가해지면..
         if nav_direction != LaneChangeDirection.none or (one_blinker and (not self.prev_one_blinker or v_ego_kph < 4 or (checkAutoTurnEnabled and steering_pressed))):  ##깜박이가 켜진시점에 검사, 정지상태에서는 lat_active가 아님. 
           if nav_direction != LaneChangeDirection.none:
-            self.turnControlState = nav_turn
-            self.lane_change_state = LaneChangeState.preLaneChange
+            if not nav_turn and road_edge_detected:
+              pass
+            else:
+              self.turnControlState = nav_turn
+              self.lane_change_state = LaneChangeState.preLaneChange
 
-            ## 턴합니다, 차선변경합니다. 소리는 한번만...
-            if self.desireEvent_nav == 0:
-              self.desireEvent = EventName.audioTurn if nav_turn else EventName.audioLaneChange
-              self.desireEvent_nav = self.desireEvent 
-          # 정지상태, 출발할때
+              ## 턴합니다, 차선변경합니다. 소리는 한번만...
+              if self.desireEvent_nav == 0:
+                self.desireEvent = EventName.audioTurn if nav_turn else EventName.audioLaneChange
+                self.desireEvent_nav = self.desireEvent 
+          elif direction != LaneChangeDirection.none:
+            pass
+        # 정지상태, 출발할때
           elif v_ego_kph < 4.0:
             if self.autoTurnControl > 0: 
               self.turnControlState = True
@@ -190,7 +246,7 @@ class DesireHelper:
             if road_edge_detected and checkAutoTurnEnabled:
               self.turnControlState = True
               self.lane_change_state = LaneChangeState.preLaneChange
-            elif carstate.rightBlinker:
+            elif rightBlinker:
               if checkAutoTurnEnabled:
                 if steering_pressed:
                   self.turnControlState = True
@@ -211,12 +267,12 @@ class DesireHelper:
                 if steering_pressed and checkAutoTurnEnabled:
                   self.turnControlState = True                
                   self.lane_change_state = LaneChangeState.preLaneChange
-                elif carstate.rightBlinker:
+                elif rightBlinker:
                   self.lane_change_state = LaneChangeState.preLaneChange
-                elif carstate.leftBlinker and steering_pressed:
+                elif leftBlinker and steering_pressed:
                   self.lane_change_state = LaneChangeState.preLaneChange
               #우, 로드에지
-              elif carstate.rightBlinker:
+              elif rightBlinker:
                 if checkAutoTurnEnabled and (checkAutoTurnSpeed or steering_pressed):
                   self.turnControlState = True
                 self.lane_change_state = LaneChangeState.preLaneChange
@@ -242,9 +298,12 @@ class DesireHelper:
         # Set lane change direction
         if nav_direction != LaneChangeDirection.none:
           self.lane_change_direction = nav_direction
+          self.turnControlState = nav_turn
+        elif direction != LaneChangeDirection.none:
+          pass
         else:
           self.lane_change_direction = LaneChangeDirection.left if \
-            carstate.leftBlinker else LaneChangeDirection.right
+            leftBlinker else LaneChangeDirection.right
 
         if self.turnControlState:
           if not one_blinker and nav_direction == LaneChangeDirection.none:
@@ -276,20 +335,30 @@ class DesireHelper:
               else:
                 self.desireEvent = EventName.preLaneChangeLeft if self.lane_change_direction == LaneChangeDirection.left else EventName.preLaneChangeRight
             self.desireEvent_prev = self.desireEvent
+        if self.lane_change_state == LaneChangeState.laneChangeStarting:
+          self.lane_change_ll_prob = 2.0 if self.turnControlState else 1.0
 
       # 2. LaneChangeState.laneChangeStarting
       elif self.lane_change_state == LaneChangeState.laneChangeStarting:
+        if nav_direction != LaneChangeDirection.none:
+          self.navActive = 2 if nav_turn else 1
         self.desireEvent = EventName.laneChange
-        # fade out over .5s
-        self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
+
+        ##턴은 늦게 시작됨.
+        if self.turnControlState:
+          if (v_ego < 1.0) or (self.lane_change_ll_prob > 1.0 and turn_prob < 0.5): #정지하거나, 아직 턴이 시작안되었으면
+            self.lane_change_ll_prob = 2.0
+          else:
+            self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
+        else:
+          self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
 
         ## 차선변경시 핸들을 방향으로 건들면... 턴으로 변경, 반대로 하면 취소..
         if not self.turnControlState:
           if steering_pressed and checkAutoTurnSpeed:  # 저속, 차선변경중 같은 방향 핸들토크.
             self.turnControlState = True
-          elif carstate.steeringPressed:  # 차선변경중 핸들토크: 무시
-            #self.lane_change_state = LaneChangeState.off
-            pass
+          elif steering_pressed_r:  # 차선변경중 핸들토크: 무시
+            self.lane_change_state = LaneChangeState.off
           elif self.lane_change_direction == LaneChangeDirection.right and road_edge_detected and checkAutoTurnSpeed: # 우측차선변경, 로드엣지, 턴속도, 턴~
             self.turnControlState = True
         elif steering_pressed: #턴중 핸들돌림... 무시
@@ -297,13 +366,14 @@ class DesireHelper:
         elif carstate.steeringPressed: # 턴중 반대로 핸들돌림... off
           self.lane_change_state = LaneChangeState.off
 
-        # 98% certainty
-        if self.turnControlState:
-            if turn_prob < 0.02 and self.lane_change_ll_prob < 0.01:
-              self.lane_change_state = LaneChangeState.laneChangeFinishing
-        else:
-            if lane_change_prob < 0.02 and self.lane_change_ll_prob < 0.01:
-              self.lane_change_state = LaneChangeState.laneChangeFinishing
+        if self.lane_change_state != LaneChangeState.off:
+          # 98% certainty
+          if self.turnControlState:
+              if turn_prob < 0.02 and self.lane_change_ll_prob < 0.01:
+                self.lane_change_state = LaneChangeState.laneChangeFinishing
+          else:
+              if lane_change_prob < 0.02 and self.lane_change_ll_prob < 0.01:
+                self.lane_change_state = LaneChangeState.laneChangeFinishing
 
       # 3.LaneChangeState.laneChangeFinishing
       elif self.lane_change_state == LaneChangeState.laneChangeFinishing:
